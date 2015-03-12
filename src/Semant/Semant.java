@@ -1,95 +1,120 @@
 package Semant;
+
 import Translate.Exp;
 import Types.Type;
 
 public class Semant {
-  Env env;
-  public Semant(ErrorMsg.ErrorMsg err) {
-    this(new Env(err));
-  }
-  Semant(Env e) {
-    env = e;
-  }
 
-  public void transProg(Absyn.Exp exp) {
-    transExp(exp);
-  }
+	static final Types.VOID VOID = new Types.VOID();
+	static final Types.INT INT = new Types.INT();
+	static final Types.STRING STRING = new Types.STRING();
+	static final Types.NIL NIL = new Types.NIL();
 
-  private void error(int pos, String msg) {
-    env.errorMsg.error(pos, msg);
-  }
+	Env env;
 
-  static final Types.VOID   VOID   = new Types.VOID();
-  static final Types.INT    INT    = new Types.INT();
-  static final Types.STRING STRING = new Types.STRING();
-  static final Types.NIL    NIL    = new Types.NIL();
+	public Semant(ErrorMsg.ErrorMsg err) {
+		this(new Env(err));
+	}
 
-  private Exp checkInt(ExpTy et, int pos) {
-    if (!INT.coerceTo(et.ty))
-      error(pos, "integer required");
-    return et.exp;
-  }
+	Semant(Env e) {
+		env = e;
+	}
 
-  ExpTy transExp(Absyn.Exp e) {
-    ExpTy result;
+	// Expression Type Check -------------------------------------------------------
+	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
+	// ForExp, IfExp, IntExp, LetExp, NilExp, OpExp, RecordExp, SeqExp, StringExp, VarExp, Exp
+	
+	ExpTy transExp(Absyn.Exp e) {
+		ExpTy result;
 
-    if (e == null)
-      return new ExpTy(null, VOID);
-    else if (e instanceof Absyn.OpExp)
-      result = transExp((Absyn.OpExp)e);
-    else if (e instanceof Absyn.LetExp)
-      result = transExp((Absyn.LetExp)e);
-    else throw new Error("Semant.transExp");
-    e.type = result.ty;
-    return result;
-  }
+		if (e == null)
+			return new ExpTy(null, VOID);
+		else if (e instanceof Absyn.OpExp)
+			result = transExp((Absyn.OpExp) e);
+		else if (e instanceof Absyn.LetExp)
+			result = transExp((Absyn.LetExp) e);
+		else
+			throw new Error("Semant.transExp");
+		e.type = result.ty;
+		return result;
+	}
+	
+	ExpTy transExp(Absyn.OpExp e) {
+		ExpTy left = transExp(e.left);
+		ExpTy right = transExp(e.right);
+		switch (e.oper) {
+		case Absyn.OpExp.PLUS:
+			checkInt(left, e.left.pos);
+			checkInt(right, e.right.pos);
+			return new ExpTy(null, INT);
+		default:
+			throw new Error("unknown operator");
+		}
+	}
 
-  ExpTy transExp(Absyn.OpExp e) {
-    ExpTy left = transExp(e.left);
-    ExpTy right = transExp(e.right);
+	ExpTy transExp(Absyn.LetExp e) {
+		env.venv.beginScope();
+		env.tenv.beginScope();
+		for (Absyn.DecList d = e.decs; d != null; d = d.tail) {
+			transDec(d.head);
+		}
+		ExpTy body = transExp(e.body);
+		env.venv.endScope();
+		env.tenv.endScope();
+		return new ExpTy(null, body.ty);
+	}
 
-    switch (e.oper) {
-    case Absyn.OpExp.PLUS:
-      checkInt(left, e.left.pos);
-      checkInt(right, e.right.pos);
-      return new ExpTy(null, INT);
-    default:
-      throw new Error("unknown operator");
-    }
-  }
+	
+	// Declarations Type Check  ---------------------------------------------------
+	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
+	
+	Exp transDec(Absyn.Dec d) {
+		if (d instanceof Absyn.VarDec)
+			return transDec((Absyn.VarDec) d);
+		throw new Error("Semant.transDec");
+	}
 
-  ExpTy transExp(Absyn.LetExp e) {
-    env.venv.beginScope();
-    env.tenv.beginScope();
-    for (Absyn.DecList d = e.decs; d != null; d = d.tail) {
-      transDec(d.head);
-    }
-    ExpTy body = transExp(e.body);
-    env.venv.endScope();
-    env.tenv.endScope();
-    return new ExpTy(null, body.ty);
-  }
+	Exp transDec(Absyn.VarDec d) {
+		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
+		// It is here to show you the general form of the transDec methods
+		ExpTy init = transExp(d.init);
+		Type type;
+		if (d.typ == null) {
+			type = init.ty;
+		} else {
+			type = VOID;
+			throw new Error("unimplemented");
+		}
+		d.entry = new VarEntry(type);
+		env.venv.put(d.name, d.entry);
+		return null;
+	}
 
-  Exp transDec(Absyn.Dec d) {
-    if (d instanceof Absyn.VarDec)
-      return transDec((Absyn.VarDec)d);
-    throw new Error("Semant.transDec");
-  }
+	
+	// Variables, Subscripts, Fields Type Check ------------------------------------ 
+	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
+	
+	
+	// Types Type Check --------------------------------------------------------------
+	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
+	
+	
+	// Helpers ----------------------------------------------------------------------
+	
+	public void transProg(Absyn.Exp exp) {
+		transExp(exp);
+	}
 
-  Exp transDec(Absyn.VarDec d) {
-    // NOTE: THIS IMPLEMENTATION IS INCOMPLETE
-    // It is here to show you the general form of the transDec methods
-    ExpTy init = transExp(d.init);
-    Type type;
-    if (d.typ == null) {
-      type = init.ty;
-    } else {
-      type = VOID;
-      throw new Error("unimplemented");
-    }
-    d.entry = new VarEntry(type);
-    env.venv.put(d.name, d.entry);
-    return null;
-  }
+	private void error(int pos, String msg) {
+		env.errorMsg.error(pos, msg);
+	}
+
+	private Exp checkInt(ExpTy et, int pos) {
+
+		if (!INT.coerceTo(et.ty))
+			error(pos, "integer required");
+		return et.exp;
+	}
+
 }
 
