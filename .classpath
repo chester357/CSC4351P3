@@ -5,6 +5,7 @@
 	<classpathentry kind="lib" path="/Users/MBP/Documents/Temp/Symbol.zip"/>
 	<classpathentry kind="lib" path="/Users/MBP/Documents/Temp/Temp/Absyn.zip"/>
 	<classpathentry kind="lib" path="/Users/MBP/Documents/Temp/Temp/ErrorMsg.zip"/>
+	<classpathentry kind="lib" path="/Users/MBP/Documents/Temp/Temp/P.zip"/>
 	<classpathentry kind="lib" path="/Users/MBP/Documents/Temp/Temp/Parse.zip"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
