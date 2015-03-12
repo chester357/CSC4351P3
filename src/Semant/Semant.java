@@ -131,7 +131,7 @@ public class Semant {
 	Exp transDec(Absyn.VarDec d) {
 		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
 		// It is here to show you the general form of the transDec methods
-		ExpTy init = transExp(d.init);
+//		ExpTy init = transExp(d.init);
 		Type type;
 		if (d.typ == null) {
 			type = init.ty;
