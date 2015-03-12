@@ -22,7 +22,8 @@ public class Semant {
 
 	// Expression Type Check -------------------------------------------------------
 	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
-	// ForExp, IfExp, IntExp, LetExp, NilExp, OpExp, RecordExp, SeqExp, StringExp, VarExp, Exp
+	// ForExp, IfExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
+	// DONE: IntExp, StringExp, OpExp,
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -33,6 +34,10 @@ public class Semant {
 			result = transExp((Absyn.OpExp) e);
 		else if (e instanceof Absyn.LetExp)
 			result = transExp((Absyn.LetExp) e);
+		else if (e instanceof Absyn.IntExp)
+			result = transExp((Absyn.IntExp) e);
+		else if (e instanceof Absyn.StringExp)
+			result = transExp((Absyn.StringExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -42,11 +47,49 @@ public class Semant {
 	ExpTy transExp(Absyn.OpExp e) {
 		ExpTy left = transExp(e.left);
 		ExpTy right = transExp(e.right);
+		
 		switch (e.oper) {
 		case Absyn.OpExp.PLUS:
 			checkInt(left, e.left.pos);
 			checkInt(right, e.right.pos);
 			return new ExpTy(null, INT);
+		case Absyn.OpExp.MINUS:
+			checkInt(left, e.left.pos);
+			checkInt(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.MUL:
+			checkInt(left, e.left.pos);
+			checkInt(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.DIV:
+			checkInt(left, e.left.pos);
+			checkInt(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.EQ:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.LT:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.LE:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.GT:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.GE:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		case Absyn.OpExp.NE:
+			checkIfCompat(left, e.left.pos);
+			checkIfCompat(right, e.right.pos);
+			return new ExpTy(null, INT);
+		
 		default:
 			throw new Error("unknown operator");
 		}
@@ -64,6 +107,17 @@ public class Semant {
 		return new ExpTy(null, body.ty);
 	}
 
+	ExpTy transExp(Absyn.IntExp e){
+		// Type Check ?
+		
+		return new ExpTy(null, INT);
+	}
+	
+	ExpTy transExp(Absyn.StringExp e){
+		// Type Check ?
+		
+		return new ExpTy(null, STRING);
+	}
 	
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
@@ -110,9 +164,15 @@ public class Semant {
 	}
 
 	private Exp checkInt(ExpTy et, int pos) {
-
 		if (!INT.coerceTo(et.ty))
 			error(pos, "integer required");
+		return et.exp;
+	}
+	
+	private Exp checkIfCompat(ExpTy et, int pos){
+		if (!INT.coerceTo(et.ty))
+			error(pos, "incompatible types for comparison");
+		
 		return et.exp;
 	}
 
