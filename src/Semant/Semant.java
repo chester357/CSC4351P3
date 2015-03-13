@@ -1,5 +1,9 @@
 package Semant;
 
+import com.sun.java_cup.internal.runtime.Symbol;
+
+import Absyn.NameTy;
+import Absyn.SimpleVar;
 import Absyn.VarDec;
 import Translate.Exp;
 import Types.Type;
@@ -22,9 +26,9 @@ public class Semant {
 	}
 
 	// Expression Type Check -------------------------------------------------------
-	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
-	// ForExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
-	// DONE: IntExp, StringExp, OpExp,
+	// TODO: ArrayExp, CallExp, ExpList, FieldExpList, FieldList, RecordExp, VarExp
+	// DONE: IntExp, StringExp, OpExp, ForExp, NilExp, WhileExp, SeqExp, BreakExp, AssignExp,
+	// LetExp, 
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -43,40 +47,113 @@ public class Semant {
 			result = transExp((Absyn.IfExp) e);
 		else if (e instanceof Absyn.ForExp)
 			result = transExp((Absyn.ForExp) e);
+		else if (e instanceof Absyn.NilExp)
+			result = transExp((Absyn.NilExp) e);
+		else if (e instanceof Absyn.VarExp)
+			result = transExp((Absyn.VarExp) e);
+		else if (e instanceof Absyn.WhileExp)
+			result = transExp((Absyn.WhileExp) e);
+		else if (e instanceof Absyn.SeqExp)
+			result = transExp((Absyn.SeqExp) e);
+		else if (e instanceof Absyn.BreakExp)
+			result = transExp((Absyn.BreakExp) e);
+		else if (e instanceof Absyn.AssignExp)
+			result = transExp((Absyn.AssignExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
 		return result;
 	}
 	
+	ExpTy transExp(Absyn.AssignExp e){
+		ExpTy exp = transExp(e.exp);
+		ExpTy var = transVar(e.var);
+		if (var.ty != exp.ty)
+			error(e.pos, "ASSIGN ERROR: assignment types do not match");
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy transExp(Absyn.BreakExp e){
+		error(e.pos, "BREAK ERROR: break called outside a loop");
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy Break(){
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy transExp(Absyn.SeqExp e){
+		for(Absyn.ExpList d = e.list; d != null; d = d.tail){
+			if (d.head instanceof Absyn.BreakExp)
+				Break();
+			else
+				transExp(d.head);
+		}
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy transExp(Absyn.WhileExp e){
+		ExpTy body;
+		ExpTy test = transExp(e.test);
+		if (e.body instanceof Absyn.BreakExp)
+			body = Break();
+		else 
+			body = transExp(e.body);
+		
+//		while xxx do yyy
+//		■ xxx must have type int
+		if (!isInt(test)) error(e.test.pos, "WHILE ERROR: test exp must be int");
+		
+//		■ yyy must have type void
+		if (!isVoid(body)) error(e.test.pos, "WHILE ERROR: body exp must be void");
+		
+//		■ result-type is void
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy transExp(Absyn.VarExp e){
+		
+		ExpTy var = transVar(e.var);
+		
+		if (var == null)
+			return new ExpTy(null, INT);
+		else
+			return new ExpTy(null, var.ty);
+	}
+	
+	ExpTy transExp(Absyn.NilExp e){
+		return new ExpTy(null, NIL);
+	}
+	
 	ExpTy transExp(Absyn.ForExp e)
 	{
-//		introduces a fresh variable, id, which ranges from the 
-//		value of exp1 to that of exp2, inclusive, by steps of 1. 
-//		The scope of id is restricted to exp3. In particular, 
-//		id cannot appear in exp1 nor exp2. The variable id 
-//		cannot be assigned to. The body exp3 and the whole loop have no value.
-		
-//		for xx := yy to zz do www
-//		■ xx is implicity declared to have type int
 //		■ xx may not be the target of an assignment expression (inside www)
-//		■ www must have type void
-//		■ result-type is void
+//		The scope of id is restricted to exp3.
+
+//		■ xx is implicity declared to have type int
+		ExpTy exp3;
+		env.venv.beginScope();
+		transDec(e.var);
+		if (e.body instanceof Absyn.BreakExp){
+			exp3 = Break();
+		}
+		else
+			exp3 = transExp(e.body);
+		env.venv.endScope();
 		
 		ExpTy exp1 = transExp(e.var.init);
 		ExpTy exp2 = transExp(e.hi);
-		ExpTy exp3 = transExp(e.body);
 		
-		transDec(e.var);
-		
+//		■ www must have type void
+		if (!isVoid(exp3)) error(e.body.pos, "FOR ERROR: do must be void");
+				
 //		■ yy and zz must both have type int
-		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
-		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
-		checkInt(exp1, e.var.init.pos);
-		checkInt(exp2, e.hi.pos);
+		if (!isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
+		if (!isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
 		
-		
+//		■ result-type is void
 		return new ExpTy(null, INT);
+		
 	}
 
 	ExpTy transExp(Absyn.IfExp e){
@@ -207,6 +284,61 @@ public class Semant {
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
 	
+	ExpTy transVar(Absyn.Var v){
+		ExpTy result;
+		
+		if (v == null)
+			return new ExpTy(null, VOID);
+		if (v instanceof Absyn.SimpleVar)
+			result = transVar((Absyn.SimpleVar) v);
+		else if (v instanceof Absyn.FieldVar)
+			result = transVar((Absyn.FieldVar) v);
+		// SubscriptVar
+		else 
+			throw new Error("Semant.transVar");
+		
+		return result; 
+	}
+	
+	ExpTy transVar(Absyn.SimpleVar v)
+	{
+		Entry x = (Entry) env.venv.get(v.name);
+		if (x instanceof VarEntry){
+			VarEntry ent = (VarEntry) x;
+			return new ExpTy(null, ent.ty);
+		}
+		else{
+			error(v.pos, "SIMPLE VAR ERROR: variable is undifined");
+			return new ExpTy(null, VOID);
+		}
+	}
+	
+	ExpTy transVar(Absyn.FieldVar v)
+	{
+		// v.field might not be correct
+		Entry x = (Entry) env.venv.get(v.field);
+		if (x instanceof VarEntry){
+			VarEntry ent = (VarEntry) x;
+			return new ExpTy(null, ent.ty);
+		}
+		else{
+			error(v.pos, "FIELD VAR ERROR: variable is undifined");
+			return new ExpTy(null, VOID);
+		}
+	}
+	
+//	ExpTy transVar(Absyn.SubscriptVar v)
+//	{
+//		Entry x = (Entry) env.venv.get();
+//		if (x instanceof VarEntry){
+//			VarEntry ent = (VarEntry) x;
+//			return new ExpTy(null, ent.ty);
+//		}
+//		else{
+//			error(v.pos, "SIMPLE VAR ERROR: variable is undifined");
+//			return new ExpTy(null, INT);
+//		}
+//	}
 	
 	// Types Type Check --------------------------------------------------------------
 	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
