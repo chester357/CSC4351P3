@@ -47,6 +47,12 @@ public class Semant {
 			result = transExp((Absyn.ForExp) e);
 		else if (e instanceof Absyn.SeqExp)
 			result = transExp((Absyn.SeqExp) e);
+		else if (e instanceof Absyn.WhileExp)
+			result = transExp((Absyn.WhileExp) e);
+		else if (e instanceof Absyn.BreakExp)
+			result = transExp((Absyn.BreakExp) e);
+		else if (e instanceof Absyn.AssignExp)
+			result = transExp((Absyn.AssignExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -62,10 +68,10 @@ public class Semant {
 //		cannot be assigned to. The body exp3 and the whole loop have no value.
 		
 //		for xx := yy to zz do www
-//		■ xx is implicity declared to have type int
-//		■ xx may not be the target of an assignment expression (inside www)
-//		■ www must have type void
-//		■ result-type is void
+//		‚ñ† xx is implicity declared to have type int
+//		‚ñ† xx may not be the target of an assignment expression (inside www)
+//		‚ñ† www must have type void
+//		‚ñ† result-type is void
 		
 		ExpTy exp1 = transExp(e.var.init);
 		ExpTy exp2 = transExp(e.hi);
@@ -73,7 +79,7 @@ public class Semant {
 		
 		transDec(e.var);
 		
-//		■ yy and zz must both have type int
+//		‚ñ† yy and zz must both have type int
 		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
 		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
 		checkInt(exp1, e.var.init.pos);
@@ -191,6 +197,38 @@ public class Semant {
 		return new ExpTy(null, STRING);
 	}
 	
+	ExpTy transExp(Absyn.WhileExp e){
+
+
+		ExpTy body;
+		ExpTy test = transExp(e.test);
+		if (e.body instanceof Absyn.BreakExp)
+			body = Break();
+		else 
+			body = transExp(e.body);
+		
+//		while xxx do yyy
+//		■ xxx must have type int
+		if (!isInt(test)) error(e.test.pos, "WHILE ERROR: test exp must be int");
+		
+//		■ yyy must have type void
+		if (!isVoid(body)) error(e.test.pos, "WHILE ERROR: body exp must be void");
+		
+//		■ result-type is void
+		return new ExpTy(null, VOID);
+	}
+
+	ExpTy Break(){
+		return new ExpTy(null, VOID);
+	}
+	
+	ExpTy transExp(Absyn.AssignExp e){
+		ExpTy exp = transExp(e.exp);
+		ExpTy var = transVar(e.var);
+		if (var.ty != exp.ty)
+			error(e.pos, "ASSIGN ERROR: assignment types do not match");
+		return new ExpTy(null, VOID);
+	}
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
 	
@@ -218,7 +256,6 @@ public class Semant {
 		return null;
 	}
 	
-	
 	Exp transDec(Absyn.TypeDec d){
 		if(env.tenv.get(d.name) == null){
 			d.entry = new NAME(d.name); 
@@ -234,10 +271,51 @@ public class Semant {
 		return null;
 	}
 	
-	
-	
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
+	
+	ExpTy transVar(Absyn.Var v){
+		ExpTy result;
+		
+		if (v == null)
+			return new ExpTy(null, VOID);
+		if (v instanceof Absyn.SimpleVar)
+			result = transVar((Absyn.SimpleVar) v);
+		else if (v instanceof Absyn.FieldVar)
+			result = transVar((Absyn.FieldVar) v);
+		// SubscriptVar
+		else 
+			throw new Error("Semant.transVar");
+		
+		return result; 
+	}
+	
+	ExpTy transVar(Absyn.SimpleVar v)
+	{
+		Entry x = (Entry) env.venv.get(v.name);
+		if (x instanceof VarEntry){
+			VarEntry ent = (VarEntry) x;
+			return new ExpTy(null, ent.ty);
+		}
+		else{
+			error(v.pos, "SIMPLE VAR ERROR: variable is undifined");
+			return new ExpTy(null, VOID);
+		}
+	}
+	
+	ExpTy transVar(Absyn.FieldVar v)
+	{
+		// v.field might not be correct
+		Entry x = (Entry) env.venv.get(v.field);
+		if (x instanceof VarEntry){
+			VarEntry ent = (VarEntry) x;
+			return new ExpTy(null, ent.ty);
+		}
+		else{
+			error(v.pos, "FIELD VAR ERROR: variable is undifined");
+			return new ExpTy(null, VOID);
+		}
+	}
 	
 	
 	// Types Type Check --------------------------------------------------------------
