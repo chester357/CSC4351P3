@@ -1,5 +1,6 @@
 package Semant;
 
+import Absyn.VarDec;
 import Translate.Exp;
 import Types.Type;
 
@@ -22,7 +23,7 @@ public class Semant {
 
 	// Expression Type Check -------------------------------------------------------
 	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
-	// ForExp, IfExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
+	// ForExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
 	// DONE: IntExp, StringExp, OpExp,
 	
 	ExpTy transExp(Absyn.Exp e) {
@@ -38,10 +39,69 @@ public class Semant {
 			result = transExp((Absyn.IntExp) e);
 		else if (e instanceof Absyn.StringExp)
 			result = transExp((Absyn.StringExp) e);
+		else if (e instanceof Absyn.IfExp)
+			result = transExp((Absyn.IfExp) e);
+		else if (e instanceof Absyn.ForExp)
+			result = transExp((Absyn.ForExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
 		return result;
+	}
+	
+	ExpTy transExp(Absyn.ForExp e)
+	{
+//		introduces a fresh variable, id, which ranges from the 
+//		value of exp1 to that of exp2, inclusive, by steps of 1. 
+//		The scope of id is restricted to exp3. In particular, 
+//		id cannot appear in exp1 nor exp2. The variable id 
+//		cannot be assigned to. The body exp3 and the whole loop have no value.
+		
+//		for xx := yy to zz do www
+//		■ xx is implicity declared to have type int
+//		■ xx may not be the target of an assignment expression (inside www)
+//		■ www must have type void
+//		■ result-type is void
+		
+		ExpTy exp1 = transExp(e.var.init);
+		ExpTy exp2 = transExp(e.hi);
+		ExpTy exp3 = transExp(e.body);
+		
+		transDec(e.var);
+		
+//		■ yy and zz must both have type int
+		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
+		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
+		checkInt(exp1, e.var.init.pos);
+		checkInt(exp2, e.hi.pos);
+		
+		
+		return new ExpTy(null, INT);
+	}
+
+	ExpTy transExp(Absyn.IfExp e){
+		
+		ExpTy test = transExp(e.test);
+		ExpTy then = transExp(e.thenclause);
+		
+		if (e.elseclause == null)
+		{
+			checkInt(test, e.test.pos);
+			if (!isVoid(then)) error(e.thenclause.pos, "IF ERROR: then then return void");
+			return new ExpTy(null, VOID);
+		}
+		else
+		{
+			ExpTy els = transExp(e.elseclause);
+			checkInt(test, e.test.pos);
+			if (then.ty != els.ty)
+			{
+				error(e.thenclause.pos, "IF ERROR: type mismatch");
+				return new ExpTy(null, VOID);
+			}
+			else
+				return new ExpTy(null, then.ty);
+		}
 	}
 	
 	ExpTy transExp(Absyn.OpExp e) {
@@ -131,7 +191,7 @@ public class Semant {
 	Exp transDec(Absyn.VarDec d) {
 		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
 		// It is here to show you the general form of the transDec methods
-//		ExpTy init = transExp(d.init);
+		ExpTy init = transExp(d.init);
 		Type type;
 		if (d.typ == null) {
 			type = init.ty;
@@ -143,7 +203,6 @@ public class Semant {
 		env.venv.put(d.name, d.entry);
 		return null;
 	}
-
 	
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
@@ -167,6 +226,18 @@ public class Semant {
 		if (!INT.coerceTo(et.ty))
 			error(pos, "integer required");
 		return et.exp;
+	}
+	
+	private boolean isVoid(ExpTy et) {
+		if (!VOID.coerceTo(et.ty))
+			return false;
+		return true;
+	}
+	
+	private boolean isInt(ExpTy et) {
+		if (!INT.coerceTo(et.ty))
+			return false;
+		return true;
 	}
 	
 	private Exp checkIfCompat(ExpTy et, int pos){
