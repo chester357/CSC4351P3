@@ -1,5 +1,5 @@
 let
         type intArray = array of int
-        var arr := intArray[10] of 0
+        type intArray = array of int
 in
 end

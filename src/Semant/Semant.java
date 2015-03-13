@@ -25,9 +25,9 @@ public class Semant {
 	}
 
 	// Expression Type Check -------------------------------------------------------
-	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
-	// ForExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
-	// DONE: IntExp, StringExp, OpExp, 
+	// TODO: FieldExpList, FieldList, NilExp, RecordExp, VarExp
+	// DONE: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, IntExp, StringExp, OpExp, WhileExp, ForExp, IfExp
+	//		 
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -291,7 +291,7 @@ public class Semant {
 			}
 		}
 		else
-			error(d.pos, "Redeclared"); 
+			error(d.pos, "Redeclared Type: "+d.name); 
 		return null;
 	}
 	
