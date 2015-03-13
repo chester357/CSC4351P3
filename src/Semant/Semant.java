@@ -230,7 +230,7 @@ public class Semant {
 			}
 		}
 		else
-			throw new Error("redeclared"); 
+			error(d.pos, "Redeclared"); 
 		return null;
 	}
 	
@@ -245,12 +245,22 @@ public class Semant {
 	
 	Type transTy(Absyn.Ty t){
 		if (t instanceof Absyn.NameTy)
-			transTy((Absyn.NameTy) t);
-		return null;
+			return transTy((Absyn.NameTy) t);
+		if (t instanceof Absyn.ArrayTy)
+			return transTy((Absyn.ArrayTy) t);
+		if (t instanceof Absyn.RecordTy)
+			return transTy((Absyn.RecordTy) t);
+		if( t instanceof Absyn.Ty)
+			return transTy((Absyn.Ty) t);
+		throw new Error("Semant.transTy");
 	}
 	
 	Type transTy(Absyn.NameTy t){
-		return null;
+		NAME n = (NAME)env.tenv.get(t.name); 
+		if(n != null)
+			return n; 
+		error(t.pos, "Not defined"); 
+		return VOID;
 	}
 	
 	// Helpers ----------------------------------------------------------------------
