@@ -1,4 +1,5 @@
-let 
-	type myInt = int
-in 
+let
+        type intArray = array of int
+        var arr := intArray[10] of 0
+in
 end

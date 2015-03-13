@@ -3,6 +3,7 @@ package Semant;
 import Absyn.VarDec;
 import Symbol.Symbol;
 import Translate.Exp;
+import Types.ARRAY;
 import Types.NAME;
 import Types.Type;
 
@@ -26,7 +27,7 @@ public class Semant {
 	// Expression Type Check -------------------------------------------------------
 	// TODO: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, FieldExpList, FieldList, WhileExp, 
 	// ForExp, LetExp, NilExp, RecordExp, SeqExp, VarExp, Exp
-	// DONE: IntExp, StringExp, OpExp,
+	// DONE: IntExp, StringExp, OpExp, 
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -53,6 +54,8 @@ public class Semant {
 			result = transExp((Absyn.BreakExp) e);
 		else if (e instanceof Absyn.AssignExp)
 			result = transExp((Absyn.AssignExp) e);
+		else if (e instanceof Absyn.ArrayExp)
+			result = transExp((Absyn.ArrayExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -229,6 +232,27 @@ public class Semant {
 			error(e.pos, "ASSIGN ERROR: assignment types do not match");
 		return new ExpTy(null, VOID);
 	}
+	
+	ExpTy transExp(Absyn.ArrayExp e){
+		NAME t = (NAME)env.tenv.get(e.typ);
+		if(t != null){
+			ExpTy size = transExp(e.size);
+			ExpTy init = transExp(e.init);
+			// Parser doesn't let this actually happen?
+			if(!INT.coerceTo(size.ty)){ 
+				error(e.pos, "Size parameter must be integer");
+				return new ExpTy(null, VOID);
+			}
+			if(t.actual() instanceof ARRAY){
+				System.out.println(t.actual()+" "+init.ty);; 
+				ARRAY a = (ARRAY)t.actual(); 
+				if(a.element.coerceTo(init.ty))
+				return new ExpTy(null, t);
+			}
+		}
+		error(e.pos, "Type not defined");
+		return new ExpTy(null,VOID); 
+	}
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
 	
@@ -271,6 +295,7 @@ public class Semant {
 		return null;
 	}
 	
+
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
 	
@@ -317,6 +342,10 @@ public class Semant {
 		}
 	}
 	
+//	ExpTy transVar(Absyn.SubscriptVar v){
+//		ExpTy index = transExp(v.index); 
+//		ExpTy var = transVar(v.var);
+//	}
 	
 	// Types Type Check --------------------------------------------------------------
 	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
@@ -341,6 +370,13 @@ public class Semant {
 		return VOID;
 	}
 	
+	Type transTy(Absyn.ArrayTy t){
+		NAME n = (NAME)env.tenv.get(t.typ);
+		if(n != null)
+			return new ARRAY(n);
+		error(t.pos, "Type:"+t.typ+" is not defined!");
+		return VOID;
+	}
 	// Helpers ----------------------------------------------------------------------
 	
 	public void transProg(Absyn.Exp exp) {
