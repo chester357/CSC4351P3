@@ -1,7 +1,9 @@
 package Semant;
 
 import Absyn.VarDec;
+import Symbol.Symbol;
 import Translate.Exp;
+import Types.NAME;
 import Types.Type;
 
 public class Semant {
@@ -43,6 +45,8 @@ public class Semant {
 			result = transExp((Absyn.IfExp) e);
 		else if (e instanceof Absyn.ForExp)
 			result = transExp((Absyn.ForExp) e);
+		else if (e instanceof Absyn.SeqExp)
+			result = transExp((Absyn.SeqExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -164,6 +168,7 @@ public class Semant {
 		ExpTy body = transExp(e.body);
 		env.venv.endScope();
 		env.tenv.endScope();
+
 		return new ExpTy(null, body.ty);
 	}
 
@@ -171,6 +176,13 @@ public class Semant {
 		// Type Check ?
 		
 		return new ExpTy(null, INT);
+	}
+	
+	ExpTy transExp(Absyn.SeqExp e){
+		for(Absyn.ExpList d = e.list; d != null; d = d.tail){
+			transExp(d.head);
+		}
+		return new ExpTy(null, VOID);
 	}
 	
 	ExpTy transExp(Absyn.StringExp e){
@@ -185,6 +197,8 @@ public class Semant {
 	Exp transDec(Absyn.Dec d) {
 		if (d instanceof Absyn.VarDec)
 			return transDec((Absyn.VarDec) d);
+		if (d instanceof Absyn.TypeDec)
+			return transDec((Absyn.TypeDec) d);
 		throw new Error("Semant.transDec");
 	}
 
@@ -195,14 +209,32 @@ public class Semant {
 		Type type;
 		if (d.typ == null) {
 			type = init.ty;
-		} else {
-			type = VOID;
-			throw new Error("unimplemented");
+		} 
+		else {
+			type = null; 
 		}
 		d.entry = new VarEntry(type);
 		env.venv.put(d.name, d.entry);
 		return null;
 	}
+	
+	
+	Exp transDec(Absyn.TypeDec d){
+		if(env.tenv.get(d.name) == null){
+			d.entry = new NAME(d.name); 
+			env.tenv.put(d.name, d.entry);
+			d.entry.bind(transTy(d.ty));
+			
+			if(d.next != null){
+				transDec(d.next);
+			}
+		}
+		else
+			throw new Error("redeclared"); 
+		return null;
+	}
+	
+	
 	
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
@@ -211,6 +243,15 @@ public class Semant {
 	// Types Type Check --------------------------------------------------------------
 	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
 	
+	Type transTy(Absyn.Ty t){
+		if (t instanceof Absyn.NameTy)
+			transTy((Absyn.NameTy) t);
+		return null;
+	}
+	
+	Type transTy(Absyn.NameTy t){
+		return null;
+	}
 	
 	// Helpers ----------------------------------------------------------------------
 	
