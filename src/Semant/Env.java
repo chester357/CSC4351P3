@@ -1,4 +1,4 @@
-package Semant;
+  package Semant;
 
 import Symbol.Table;
 import Symbol.Symbol;

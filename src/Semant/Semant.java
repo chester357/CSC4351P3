@@ -6,7 +6,8 @@ import Absyn.NameTy;
 import Absyn.SimpleVar;
 import Absyn.VarDec;
 import Translate.Exp;
-import Types.Type;
+import Types.*;
+import Symbol.*;
 
 public class Semant {
 
@@ -262,9 +263,29 @@ public class Semant {
 	Exp transDec(Absyn.Dec d) {
 		if (d instanceof Absyn.VarDec)
 			return transDec((Absyn.VarDec) d);
+		else if (d instanceof Absyn.FunctionDec)
+			return transDec((Absyn.FunctionDec) d);
 		throw new Error("Semant.transDec");
 	}
 
+	Exp transDec(Absyn.FunctionDec d){
+//		function ff(a:int,b:string):aType = expr
+//		■ aType must “match” the type of expr; if “:aType” is missing, then
+//		expr must have a void type
+//		■ the formal parameter names (a and b, in this example) must be
+//		unique within the parameter list.
+//		
+//		ExpTy body = transExp(d.body);
+		
+		// function nfactor(n: int, x: int) = ()
+		
+		Type result;
+		if (d.result != null)
+			result = transTy(d.result);
+		
+		return null;
+	}
+	
 	Exp transDec(Absyn.VarDec d) {
 		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
 		// It is here to show you the general form of the transDec methods
@@ -342,6 +363,21 @@ public class Semant {
 	
 	// Types Type Check --------------------------------------------------------------
 	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
+	
+	Type transTy(Absyn.Ty t){
+		 Type result;
+		if (t instanceof Absyn.NameTy){
+			result = transTy((Absyn.NameTy) t);
+			return result;
+		}
+		return null;
+	}
+	
+	Type transTy(Absyn.NameTy t){
+		
+		return new NAME(new Symbol.Symbol());		
+		return null;
+	}
 	
 	
 	// Helpers ----------------------------------------------------------------------
