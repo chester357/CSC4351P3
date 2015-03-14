@@ -1,7 +1,5 @@
 package Semant;
 
-import Absyn.VarDec;
-import Symbol.Symbol;
 import Translate.Exp;
 import Types.ARRAY;
 import Types.NAME;
@@ -25,9 +23,7 @@ public class Semant {
 	}
 
 	// Expression Type Check -------------------------------------------------------
-	// TODO: FieldExpList, FieldList, NilExp, RecordExp, VarExp
-	// DONE: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, IntExp, StringExp, OpExp, WhileExp, ForExp, IfExp
-	//		 
+	// TODO: FieldExpList, FieldList, RecordExp,  
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -56,6 +52,10 @@ public class Semant {
 			result = transExp((Absyn.AssignExp) e);
 		else if (e instanceof Absyn.ArrayExp)
 			result = transExp((Absyn.ArrayExp) e);
+		else if (e instanceof Absyn.VarExp)
+			result = transExp((Absyn.VarExp) e);
+		else if (e instanceof Absyn.NilExp)
+			result = transExp((Absyn.NilExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -194,6 +194,10 @@ public class Semant {
 		return new ExpTy(null, VOID);
 	}
 	
+	ExpTy transExp(Absyn.NilExp e){
+		return new ExpTy(null, NIL); 
+	}
+	
 	ExpTy transExp(Absyn.StringExp e){
 		// Type Check ?
 		
@@ -244,7 +248,6 @@ public class Semant {
 				return new ExpTy(null, VOID);
 			}
 			if(t.actual() instanceof ARRAY){
-				System.out.println(t.actual()+" "+init.ty);; 
 				ARRAY a = (ARRAY)t.actual(); 
 				if(a.element.coerceTo(init.ty))
 				return new ExpTy(null, t);
@@ -253,8 +256,17 @@ public class Semant {
 		error(e.pos, "Type not defined");
 		return new ExpTy(null,VOID); 
 	}
+	
+	ExpTy transExp(Absyn.VarExp e){
+		ExpTy var = transVar(e.var);
+		if(var == null){
+			error(e.pos, "Variable not declared");
+			return new ExpTy(null, INT); 
+		}
+		return new ExpTy(null, var.ty); 
+	}
 	// Declarations Type Check  ---------------------------------------------------
-	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
+	// TODO FunctionDec 
 	
 	Exp transDec(Absyn.Dec d) {
 		if (d instanceof Absyn.VarDec)
@@ -269,11 +281,16 @@ public class Semant {
 		// It is here to show you the general form of the transDec methods
 		ExpTy init = transExp(d.init);
 		Type type;
+		
 		if (d.typ == null) {
 			type = init.ty;
 		} 
 		else {
-			type = null; 
+			if(env.tenv.get(d.typ.name) == null){
+				d.entry = new VarEntry(VOID);
+				return null;
+			}
+			type = transTy(d.typ); 
 		}
 		d.entry = new VarEntry(type);
 		env.venv.put(d.name, d.entry);
@@ -295,9 +312,8 @@ public class Semant {
 		return null;
 	}
 	
-
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
-	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
+	// TODO: Fields, FieldList, FieldExpList, 
 	
 	ExpTy transVar(Absyn.Var v){
 		ExpTy result;
@@ -308,7 +324,8 @@ public class Semant {
 			result = transVar((Absyn.SimpleVar) v);
 		else if (v instanceof Absyn.FieldVar)
 			result = transVar((Absyn.FieldVar) v);
-		// SubscriptVar
+		else if (v instanceof Absyn.SubscriptVar)
+			result = transVar((Absyn.SubscriptVar) v);
 		else 
 			throw new Error("Semant.transVar");
 		
@@ -342,13 +359,22 @@ public class Semant {
 		}
 	}
 	
-//	ExpTy transVar(Absyn.SubscriptVar v){
-//		ExpTy index = transExp(v.index); 
-//		ExpTy var = transVar(v.var);
-//	}
+	ExpTy transVar(Absyn.SubscriptVar v){
+		ExpTy index = transExp(v.index); 
+		ExpTy var = transVar(v.var);
+		
+		if(!INT.coerceTo(index.ty))
+			error(v.pos, "Index must be int.");
+		if(var.ty.actual() instanceof ARRAY){
+			ARRAY arr = (ARRAY)var.ty.actual(); 
+			return new ExpTy(null, arr.element); 
+		}
+		error(v.pos, v.var + " ");
+		return new ExpTy(null, VOID); 
+	}
 	
 	// Types Type Check --------------------------------------------------------------
-	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
+	// TODO:RecordTy
 	
 	Type transTy(Absyn.Ty t){
 		if (t instanceof Absyn.NameTy)
@@ -357,8 +383,6 @@ public class Semant {
 			return transTy((Absyn.ArrayTy) t);
 		if (t instanceof Absyn.RecordTy)
 			return transTy((Absyn.RecordTy) t);
-		if( t instanceof Absyn.Ty)
-			return transTy((Absyn.Ty) t);
 		throw new Error("Semant.transTy");
 	}
 	
@@ -377,6 +401,8 @@ public class Semant {
 		error(t.pos, "Type:"+t.typ+" is not defined!");
 		return VOID;
 	}
+	
+	
 	// Helpers ----------------------------------------------------------------------
 	
 	public void transProg(Absyn.Exp exp) {

@@ -1,5 +1,6 @@
 let
-        type intArray = array of int
-        type intArray = array of int
+        type zInt = int
+        var x : d := 2
 in
 end
+
