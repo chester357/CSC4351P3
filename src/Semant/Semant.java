@@ -64,33 +64,34 @@ public class Semant {
 	
 	ExpTy transExp(Absyn.ForExp e)
 	{
-//		introduces a fresh variable, id, which ranges from the 
-//		value of exp1 to that of exp2, inclusive, by steps of 1. 
-//		The scope of id is restricted to exp3. In particular, 
-//		id cannot appear in exp1 nor exp2. The variable id 
-//		cannot be assigned to. The body exp3 and the whole loop have no value.
-		
-//		for xx := yy to zz do www
-//		‚ñ† xx is implicity declared to have type int
-//		‚ñ† xx may not be the target of an assignment expression (inside www)
-//		‚ñ† www must have type void
-//		‚ñ† result-type is void
+//		■ xx may not be the target of an assignment expression (inside www)
+//		The scope of id is restricted to exp3.
+
+//		■ xx is implicity declared to have type int
+		ExpTy exp3;
+		env.venv.beginScope();
+		transDec(e.var);
+		if (e.body instanceof Absyn.BreakExp){
+			exp3 = Break();
+		}
+		else
+			exp3 = transExp(e.body);
+		env.venv.endScope();
 		
 		ExpTy exp1 = transExp(e.var.init);
 		ExpTy exp2 = transExp(e.hi);
-		ExpTy exp3 = transExp(e.body);
 		
-		transDec(e.var);
+//		■ www must have type void
+		if (!isVoid(exp3)) error(e.body.pos, "FOR ERROR: do must be void");
+				
+//		■ yy and zz must both have type int
+		if (!isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
+		if (!isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
 		
-//		‚ñ† yy and zz must both have type int
-		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
-		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
-		checkInt(exp1, e.var.init.pos);
-		checkInt(exp2, e.hi.pos);
-		
-		
-		return new ExpTy(null, INT);
+//		■ result-type is void
+		return new ExpTy(null, INT);	
 	}
+
 
 	ExpTy transExp(Absyn.IfExp e){
 		
