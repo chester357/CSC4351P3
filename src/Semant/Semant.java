@@ -2,7 +2,10 @@ package Semant;
 
 import java.util.ArrayList;
 
+import Absyn.ExpList;
+import Absyn.RecordExp;
 import Absyn.VarExp;
+import Symbol.Symbol;
 import Translate.Exp;
 import Types.ARRAY;
 import Types.NAME;
@@ -28,8 +31,8 @@ public class Semant {
 
 	// Expression Type Check -------------------------------------------------------
 	// TODO: FieldExpList, FieldList, NilExp, RecordExp, VarExp
-	// DONE: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, IntExp, StringExp, OpExp, WhileExp, ForExp, IfExp
-	//		 
+	// DONE: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, IntExp, StringExp, 
+	// OpExp, WhileExp, ForExp, IfExp
 	
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
@@ -58,10 +61,71 @@ public class Semant {
 			result = transExp((Absyn.AssignExp) e);
 		else if (e instanceof Absyn.ArrayExp)
 			result = transExp((Absyn.ArrayExp) e);
+		else if (e instanceof Absyn.CallExp)
+			result = transExp((Absyn.CallExp) e);
+		else if (e instanceof Absyn.RecordExp)
+			result = transExp((Absyn.RecordExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
 		return result;
+	}
+	
+	ExpTy transExp(Absyn.RecordExp e){
+		RECORD n = (RECORD) env.tenv.get(e.fields.name);
+		return new ExpTy(null, n);
+	}
+	
+	ExpTy transExp(Absyn.CallExp e){
+		
+		FunEntry func = (FunEntry) env.venv.get(e.func); 
+		
+		if (func == null){
+			error(e.pos, "FUNCTION CALL ERROR: this function is not defined");
+			return new ExpTy(null, VOID);
+		}
+		else
+		{
+			int reqCount = 0;
+			int passedCount = 0;
+			
+			RECORD temp = func.formals;
+			
+			while(temp != null){
+				reqCount++;
+				temp = temp.tail;
+			}
+			
+			for(Absyn.ExpList d = e.args; d != null; d = d.tail){
+				passedCount++;
+			}
+			
+			if (reqCount != passedCount)
+				error(e.pos, "FUNCTION CALL ERROR: parameter count mismatch");
+			else
+			{
+				boolean argMismatch = false;
+				RECORD recs = func.formals;
+				ExpList params = e.args;
+				
+				while (recs != null){
+					Type requiredType = recs.fieldType.actual();
+					Type fieldType = transExp(params.head).ty;
+					if (requiredType != fieldType)
+						argMismatch = true;
+					recs = recs.tail;
+					params = params.tail;
+				}
+				
+				if (argMismatch)
+					error(e.pos, "FUNCTION CALL ERROR: argument type mismatch");
+			}	
+						
+			if (func.result != null)
+				return new ExpTy(null, func.result);
+			else 
+				return new ExpTy(null, VOID);
+		}
 	}
 	
 	ExpTy transExp(Absyn.ForExp e)
@@ -258,7 +322,7 @@ public class Semant {
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
 	
-	Exp transDec(Absyn.Dec d) {
+	ExpTy transDec(Absyn.Dec d) {
 		if (d instanceof Absyn.VarDec)
 			return transDec((Absyn.VarDec) d);
 		if (d instanceof Absyn.TypeDec)
@@ -267,11 +331,8 @@ public class Semant {
 			return transDec((Absyn.FunctionDec) d);
 		throw new Error("Semant.transDec");
 	}
-	
-	Exp transDec(Absyn.FunctionDec d){
-				
-//		aType must “match” the type of expr; if “:aType” is missing, then
-//		expr must have a void type
+		
+	ExpTy transDec(Absyn.FunctionDec d){
 		Type returnType = null;
 		ExpTy body = transExp(d.body);
 		
@@ -284,22 +345,26 @@ public class Semant {
 		else if(body.ty != VOID)
 			error(d.pos, "FUNCTION DEC ERROR: body exp type must be void");
 		
-//		■ the formal parameter names (a and b, in this example) must be
-//		unique within the parameter list.
 		if (repeatedFields(d.params))
 			error(d.pos, "FUNCTION DEC ERROR: field name repeated");
 		
-		// Not finished
 		RECORD formals = transTypeFields(d.params);
-		
-		if (returnType != null){
-			// add the function entry to the variable env
-			env.venv.put(d.name, new FunEntry(formals, returnType));
+				
+		if (env.venv.get(d.name) == null){
+			if (returnType != null){
+				FunEntry funEntry = new FunEntry(formals, returnType);
+				d.entry = funEntry;
+				env.venv.put(d.name, funEntry);
+			}
+			else
+				env.venv.put(d.name, new FunEntry(formals, VOID));
+			
+			if(d.next != null){
+				transDec(d.next);
+			}
 		}
-		else{
-			// add the function entry to the variable env
-			env.venv.put(d.name, new FunEntry(formals, VOID));
-		}
+		else
+			error(d.pos, "FUNCTION DEC ERROR: redeclared function");
 		
 		env.venv.beginScope();
 		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
@@ -313,14 +378,18 @@ public class Semant {
 	
 	RECORD transTypeFields(Absyn.FieldList f){
 		// find a way to get field type (VOID is incorrect)
+		// look up the NAME type in the type env
 		if (f == null)
 			return null;
-		if (f.tail == null) 
-			return null;
-		return new RECORD(f.name, VOID, transTypeFields(f.tail));
+		
+		NAME name = (NAME) env.tenv.get(f.typ);
+		
+		RECORD result = new RECORD(f.name, name, transTypeFields(f.tail));
+		
+		return result;
 	}
 
-	Exp transDec(Absyn.VarDec d) {
+	ExpTy transDec(Absyn.VarDec d) {
 		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
 		// It is here to show you the general form of the transDec methods
 		ExpTy init = transExp(d.init);
@@ -336,7 +405,7 @@ public class Semant {
 		return null;
 	}
 	
-	Exp transDec(Absyn.TypeDec d){
+	ExpTy transDec(Absyn.TypeDec d){
 		if(env.tenv.get(d.name) == null){
 			d.entry = new NAME(d.name); 
 			env.tenv.put(d.name, d.entry);
@@ -350,7 +419,6 @@ public class Semant {
 			error(d.pos, "Redeclared Type: "+d.name); 
 		return null;
 	}
-	
 
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
 	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
@@ -415,7 +483,18 @@ public class Semant {
 			return transTy((Absyn.RecordTy) t);
 		if( t instanceof Absyn.Ty)
 			return transTy((Absyn.Ty) t);
+		if( t instanceof Absyn.RecordTy)
+			return transTy((Absyn.RecordTy) t);
 		throw new Error("Semant.transTy");
+	}
+	
+	Type transTy(Absyn.RecordTy t){
+		RECORD n = (RECORD) env.tenv.get(t.fields.name); 
+		
+		if(n != null)
+			return n; 
+		error(t.pos, "RECORD ERROR: Not defined"); 
+		return VOID;
 	}
 	
 	Type transTy(Absyn.NameTy t){
