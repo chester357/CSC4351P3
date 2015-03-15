@@ -1,8 +1,11 @@
 package Semant;
 
+import java.util.ArrayList;
+
 import Translate.Exp;
 import Types.ARRAY;
 import Types.NAME;
+import Types.RECORD;
 import Types.Type;
 
 public class Semant {
@@ -91,7 +94,6 @@ public class Semant {
 //		■ result-type is void
 		return new ExpTy(null, INT);	
 	}
-
 
 	ExpTy transExp(Absyn.IfExp e){
 		
@@ -266,6 +268,7 @@ public class Semant {
 		}
 		return new ExpTy(null, var.ty); 
 	}
+	
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO FunctionDec 
 	
@@ -311,6 +314,58 @@ public class Semant {
 		else
 			error(d.pos, "Redeclared Type: "+d.name); 
 		return null;
+	}
+	
+	Exp transDec(Absyn.FunctionDec d){
+		
+//		aType must “match” the type of expr; if “:aType” is missing, then
+//		expr must have a void type
+		Type returnType = null;
+		ExpTy body = transExp(d.body);
+		
+		if (d.result != null)
+		{
+			returnType = transTy(d.result);
+			if (returnType.actual() != body.ty)
+				error(d.result.pos, "FUNCTION DEC ERROR: return type not equal to body type");
+		}
+		else if(body.ty != VOID)
+			error(d.pos, "FUNCTION DEC ERROR: body exp type must be void");
+		
+//		■ the formal parameter names (a and b, in this example) must be
+//		unique within the parameter list.
+		if (repeatedFields(d.params))
+			error(d.pos, "FUNCTION DEC ERROR: field name repeated");
+		
+		// Not finished
+		RECORD formals = transTypeFields(d.params);
+		
+		if (returnType != null){
+			// add the function entry to the variable env
+			env.venv.put(d.name, new FunEntry(formals, returnType));
+		}
+		else{
+			// add the function entry to the variable env
+			env.venv.put(d.name, new FunEntry(formals, VOID));
+		}
+		
+		env.venv.beginScope();
+		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
+			env.venv.put(p.name, new VarEntry((Type) env.tenv.get(p.typ)));
+		}
+		transExp(d.body);
+		env.venv.endScope();
+		
+		return null;
+	}
+	
+	RECORD transTypeFields(Absyn.FieldList f){
+		// find a way to get field type (VOID is incorrect)
+		if (f == null)
+			return null;
+		if (f.tail == null) 
+			return null;
+		return new RECORD(f.name, VOID, transTypeFields(f.tail));
 	}
 	
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
@@ -409,7 +464,27 @@ public class Semant {
 	public void transProg(Absyn.Exp exp) {
 		transExp(exp);
 	}
-
+	
+	private boolean repeatedFields(Absyn.FieldList fl){
+		boolean repeatedField = false;
+		ArrayList<String> fieldNames = new ArrayList<String>();
+		
+		for (Absyn.FieldList f = fl; f != null; f = f.tail){
+			
+			fieldNames.add(f.name.toString());
+			
+			for (int i = 0; i < fieldNames.size() - 1; i++){
+				if (fieldNames.get(i) == f.name.toString())
+					repeatedField = true;
+			}
+		}
+		
+		if (repeatedField)
+			return true;
+		else
+			return false;
+	}
+	
 	private void error(int pos, String msg) {
 		env.errorMsg.error(pos, msg);
 	}
@@ -435,7 +510,6 @@ public class Semant {
 	private Exp checkIfCompat(ExpTy et, int pos){
 		if (!INT.coerceTo(et.ty))
 			error(pos, "incompatible types for comparison");
-		
 		return et.exp;
 	}
 
