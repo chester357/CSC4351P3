@@ -2,6 +2,7 @@ package Semant;
 
 import java.util.ArrayList;
 
+import Absyn.ExpList;
 import Translate.Exp;
 import Types.ARRAY;
 import Types.NAME;
@@ -59,6 +60,8 @@ public class Semant {
 			result = transExp((Absyn.VarExp) e);
 		else if (e instanceof Absyn.NilExp)
 			result = transExp((Absyn.NilExp) e);
+		else if ( e instanceof Absyn.CallExp)
+			result = transExp((Absyn.CallExp) e); 
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
@@ -67,32 +70,32 @@ public class Semant {
 	
 	ExpTy transExp(Absyn.ForExp e)
 	{
-//		■ xx may not be the target of an assignment expression (inside www)
-//		The scope of id is restricted to exp3.
-
-//		■ xx is implicity declared to have type int
-		ExpTy exp3;
-		env.venv.beginScope();
-		transDec(e.var);
-		if (e.body instanceof Absyn.BreakExp){
-			exp3 = Break();
-		}
-		else
-			exp3 = transExp(e.body);
-		env.venv.endScope();
+//		introduces a fresh variable, id, which ranges from the 
+//		value of exp1 to that of exp2, inclusive, by steps of 1. 
+//		The scope of id is restricted to exp3. In particular, 
+//		id cannot appear in exp1 nor exp2. The variable id 
+//		cannot be assigned to. The body exp3 and the whole loop have no value.
+		
+//		for xx := yy to zz do www
+//		‚ñ† xx is implicity declared to have type int
+//		‚ñ† xx may not be the target of an assignment expression (inside www)
+//		‚ñ† www must have type void
+//		‚ñ† result-type is void
 		
 		ExpTy exp1 = transExp(e.var.init);
 		ExpTy exp2 = transExp(e.hi);
+		ExpTy exp3 = transExp(e.body);
 		
-//		■ www must have type void
-		if (!isVoid(exp3)) error(e.body.pos, "FOR ERROR: do must be void");
-				
-//		■ yy and zz must both have type int
-		if (!isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
-		if (!isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
+		transDec(e.var);
 		
-//		■ result-type is void
-		return new ExpTy(null, INT);	
+//		‚ñ† yy and zz must both have type int
+		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
+		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
+		checkInt(exp1, e.var.init.pos);
+		checkInt(exp2, e.hi.pos);
+		
+		
+		return new ExpTy(null, INT);
 	}
 
 	ExpTy transExp(Absyn.IfExp e){
@@ -269,6 +272,58 @@ public class Semant {
 		return new ExpTy(null, var.ty); 
 	}
 	
+ExpTy transExp(Absyn.CallExp e){
+		
+		FunEntry func = (FunEntry) env.venv.get(e.func); 
+		
+		if (func == null){
+			error(e.pos, "FUNCTION CALL ERROR: this function is not defined");
+			return new ExpTy(null, VOID);
+		}
+		else
+		{
+			int reqCount = 0;
+			int passedCount = 0;
+			
+			RECORD temp = func.formals;
+			
+			while(temp != null){
+				reqCount++;
+				temp = temp.tail;
+			}
+			
+			for(Absyn.ExpList d = e.args; d != null; d = d.tail){
+				passedCount++;
+			}
+			
+			if (reqCount != passedCount)
+				error(e.pos, "FUNCTION CALL ERROR: parameter count mismatch");
+			else
+			{
+				boolean argMismatch = false;
+				RECORD recs = func.formals;
+				ExpList params = e.args;
+				
+				while (recs != null){
+					Type requiredType = recs.fieldType.actual();
+					Type fieldType = transExp(params.head).ty;
+					if (requiredType != fieldType)
+						argMismatch = true;
+					recs = recs.tail;
+					params = params.tail;
+				}
+				
+				if (argMismatch)
+					error(e.pos, "FUNCTION CALL ERROR: argument type mismatch");
+			}	
+						
+			if (func.result != null)
+				return new ExpTy(null, func.result);
+			else 
+				return new ExpTy(null, VOID);
+		}
+	}
+	
 	// Declarations Type Check  ---------------------------------------------------
 	// TODO FunctionDec 
 	
@@ -280,9 +335,63 @@ public class Semant {
 		throw new Error("Semant.transDec");
 	}
 
+	
+	ExpTy transDec(Absyn.FunctionDec d){
+		Type returnType = null;
+		ExpTy body = transExp(d.body);
+		
+		// Type Checking ---------------------------------------------------------------------
+		
+		if (d.result != null){
+			returnType = transTy(d.result);
+			if (returnType.actual() != body.ty)
+				error(d.result.pos, "FUNCTION DEC ERROR: return type not equal to body type");
+		}
+		else if(body.ty != VOID){
+			error(d.pos, "FUNCTION DEC ERROR: body exp type must be void");
+			returnType = VOID;
+		}
+		
+		if (repeatedFields(d.params))
+			error(d.pos, "FUNCTION DEC ERROR: field name repeated");
+		
+		if (env.venv.get(d.name) != null)
+			error(d.pos, "FUNCTION DEC ERROR: redeclared function");
+		
+		// Insert Function --------------------------------------------------------------------
+		
+		RECORD formals = transTypeFields(d.params);
+				
+		FunEntry funEntry = new FunEntry(formals, returnType);
+		d.entry = funEntry;
+		env.venv.put(d.name, funEntry);
+		env.venv.beginScope();
+		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
+			env.venv.put(p.name, new VarEntry((Type) env.tenv.get(p.typ)));
+		}
+		transExp(d.body);
+		env.venv.endScope();
+				
+		if(d.next != null)
+			transDec(d.next);
+		
+		return null;
+	}
+	
+	RECORD transTypeFields(Absyn.FieldList f){
+		// find a way to get field type (VOID is incorrect)
+		// look up the NAME type in the type env
+		if (f == null)
+			return null;
+		
+		NAME name = (NAME) env.tenv.get(f.typ);
+		
+		RECORD result = new RECORD(f.name, name, transTypeFields(f.tail));
+		
+		return result;
+	}
+	
 	Exp transDec(Absyn.VarDec d) {
-		// NOTE: THIS IMPLEMENTATION IS INCOMPLETE
-		// It is here to show you the general form of the transDec methods
 		ExpTy init = transExp(d.init);
 		Type type;
 		
@@ -314,58 +423,6 @@ public class Semant {
 		else
 			error(d.pos, "Redeclared Type: "+d.name); 
 		return null;
-	}
-	
-	Exp transDec(Absyn.FunctionDec d){
-		
-//		aType must “match” the type of expr; if “:aType” is missing, then
-//		expr must have a void type
-		Type returnType = null;
-		ExpTy body = transExp(d.body);
-		
-		if (d.result != null)
-		{
-			returnType = transTy(d.result);
-			if (returnType.actual() != body.ty)
-				error(d.result.pos, "FUNCTION DEC ERROR: return type not equal to body type");
-		}
-		else if(body.ty != VOID)
-			error(d.pos, "FUNCTION DEC ERROR: body exp type must be void");
-		
-//		■ the formal parameter names (a and b, in this example) must be
-//		unique within the parameter list.
-		if (repeatedFields(d.params))
-			error(d.pos, "FUNCTION DEC ERROR: field name repeated");
-		
-		// Not finished
-		RECORD formals = transTypeFields(d.params);
-		
-		if (returnType != null){
-			// add the function entry to the variable env
-			env.venv.put(d.name, new FunEntry(formals, returnType));
-		}
-		else{
-			// add the function entry to the variable env
-			env.venv.put(d.name, new FunEntry(formals, VOID));
-		}
-		
-		env.venv.beginScope();
-		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
-			env.venv.put(p.name, new VarEntry((Type) env.tenv.get(p.typ)));
-		}
-		transExp(d.body);
-		env.venv.endScope();
-		
-		return null;
-	}
-	
-	RECORD transTypeFields(Absyn.FieldList f){
-		// find a way to get field type (VOID is incorrect)
-		if (f == null)
-			return null;
-		if (f.tail == null) 
-			return null;
-		return new RECORD(f.name, VOID, transTypeFields(f.tail));
 	}
 	
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
@@ -442,6 +499,28 @@ public class Semant {
 		throw new Error("Semant.transTy");
 	}
 	
+	Type transTy(Absyn.RecordTy t){
+		
+		RECORD rec = transTypeFields(t.fields); 
+		
+		if (rec == null){
+			error (t.pos, "RECORD ERROR: error...");
+			return VOID;
+		}
+		else
+			return rec;
+		
+//		if (t == null)
+//			return null;
+//		
+//		RECORD n = (RECORD) env.tenv.get(t.fields.name); 
+//		
+//		if(n != null)
+//			return new RECORD(n.fieldName, n.actual(), transTypeFields(t.fields)); 
+//		error(t.pos, "RECORD ERROR: Not defined"); 
+//		return VOID;
+	}
+	
 	Type transTy(Absyn.NameTy t){
 		NAME n = (NAME)env.tenv.get(t.name); 
 		if(n != null)
@@ -465,6 +544,29 @@ public class Semant {
 		transExp(exp);
 	}
 	
+	private void error(int pos, String msg) {
+		env.errorMsg.error(pos, msg);
+	}
+	
+	private Exp checkInt(ExpTy et, int pos) {
+		if (!INT.coerceTo(et.ty))
+			error(pos, "integer required");
+		return et.exp;
+	}
+	
+
+	private boolean isVoid(ExpTy et) {
+		if (!VOID.coerceTo(et.ty))
+			return false;
+		return true;
+	}
+	
+	private boolean isInt(ExpTy et) {
+		if (!INT.coerceTo(et.ty))
+			return false;
+		return true;
+	}
+	
 	private boolean repeatedFields(Absyn.FieldList fl){
 		boolean repeatedField = false;
 		ArrayList<String> fieldNames = new ArrayList<String>();
@@ -485,27 +587,6 @@ public class Semant {
 			return false;
 	}
 	
-	private void error(int pos, String msg) {
-		env.errorMsg.error(pos, msg);
-	}
-
-	private Exp checkInt(ExpTy et, int pos) {
-		if (!INT.coerceTo(et.ty))
-			error(pos, "integer required");
-		return et.exp;
-	}
-	
-	private boolean isVoid(ExpTy et) {
-		if (!VOID.coerceTo(et.ty))
-			return false;
-		return true;
-	}
-	
-	private boolean isInt(ExpTy et) {
-		if (!INT.coerceTo(et.ty))
-			return false;
-		return true;
-	}
 	
 	private Exp checkIfCompat(ExpTy et, int pos){
 		if (!INT.coerceTo(et.ty))

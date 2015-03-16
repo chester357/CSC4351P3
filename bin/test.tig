@@ -1,6 +1,5 @@
 let
-        type zInt = int
-        var x : d := 2
+        type int = array of string
 in
 end
 
