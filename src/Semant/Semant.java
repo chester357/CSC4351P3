@@ -19,6 +19,8 @@ public class Semant {
 	static final Types.STRING STRING = new Types.STRING();
 	static final Types.NIL NIL = new Types.NIL();
 
+	boolean inLoop = false;
+	
 	Env env;
 
 	public Semant(ErrorMsg.ErrorMsg err) {
@@ -82,7 +84,10 @@ public class Semant {
 	}
 	
 	ExpTy transExp(Absyn.BreakExp e){
-		return new ExpTy(null, VOID);
+		if (!inLoop)
+			error(e.pos, "BREAK ERROR: break called while not in a loop");
+			
+		return new ExpTy(null, VOID);	
 	}
 	
 	ExpTy transExp(Absyn.RecordExp e){
@@ -144,31 +149,17 @@ public class Semant {
 	
 	ExpTy transExp(Absyn.ForExp e)
 	{
-//		introduces a fresh variable, id, which ranges from the 
-//		value of exp1 to that of exp2, inclusive, by steps of 1. 
-//		The scope of id is restricted to exp3. In particular, 
-//		id cannot appear in exp1 nor exp2. The variable id 
-//		cannot be assigned to. The body exp3 and the whole loop have no value.
-		
-//		for xx := yy to zz do www
-//		‚ñ† xx is implicity declared to have type int
-//		‚ñ† xx may not be the target of an assignment expression (inside www)
-//		‚ñ† www must have type void
-//		‚ñ† result-type is void
-		
+		inLoop = true;
 		ExpTy exp1 = transExp(e.var.init);
 		ExpTy exp2 = transExp(e.hi);
-		ExpTy exp3 = transExp(e.body);
+		transExp(e.body);
 		
 		transDec(e.var);
 		
-//		‚ñ† yy and zz must both have type int
-		if (isInt(exp1)) error(e.var.init.pos, "FOR ERROR: assignmen must be int");
-		if (isInt(exp2)) error(e.hi.pos, "FOR ERROR: max must be int");
 		checkInt(exp1, e.var.init.pos);
 		checkInt(exp2, e.hi.pos);
 		
-		
+		inLoop = false;
 		return new ExpTy(null, INT);
 	}
 
@@ -282,22 +273,17 @@ public class Semant {
 	
 	ExpTy transExp(Absyn.WhileExp e){
 
-
+		inLoop = true;
 		ExpTy body;
 		ExpTy test = transExp(e.test);
-		if (e.body instanceof Absyn.BreakExp)
-			body = Break();
-		else 
-			body = transExp(e.body);
 		
-//		while xxx do yyy
-//		■ xxx must have type int
+		body = transExp(e.body);
+		
 		if (!isInt(test)) error(e.test.pos, "WHILE ERROR: test exp must be int");
 		
-//		■ yyy must have type void
 		if (!isVoid(body)) error(e.test.pos, "WHILE ERROR: body exp must be void");
 		
-//		■ result-type is void
+		inLoop = false;
 		return new ExpTy(null, VOID);
 	}
 
@@ -380,7 +366,6 @@ public class Semant {
 		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
 			env.venv.put(p.name, new VarEntry((Type) env.tenv.get(p.typ)));
 		}
-		transExp(d.body);
 		env.venv.endScope();
 				
 		if(d.next != null)
@@ -418,7 +403,9 @@ public class Semant {
 		return null;
 	}
 	
-	ExpTy transDec(Absyn.TypeDec d){
+	ExpTy transDec(Absyn.TypeDec d){	
+		Absyn.TypeDec current = d;
+		
 		if(env.tenv.get(d.name) == null){
 			d.entry = new NAME(d.name); 
 			env.tenv.put(d.name, d.entry);
@@ -426,8 +413,8 @@ public class Semant {
 			if(d.next != null){
 				transDec(d.next);
 			}
-		}
-		else
+		} 
+		else 
 			error(d.pos, "Redeclared Type: "+d.name); 
 		return null;
 	}
@@ -529,6 +516,7 @@ public class Semant {
 	}
 	
 	Type transTy(Absyn.ArrayTy t){
+				
 		NAME n = (NAME)env.tenv.get(t.typ);
 		if(n != null)
 			return new ARRAY(n);
