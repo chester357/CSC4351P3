@@ -30,10 +30,9 @@ public class Semant {
 	}
 
 	// Expression Type Check -------------------------------------------------------
-	// TODO: FieldExpList, FieldList, NilExp, RecordExp, VarExp
+	// TODO: FieldExpList, 
 	// DONE: ArrayExp, AssignExp, BreakExp, CallExp, ExpList, IntExp, StringExp, 
-	// OpExp, WhileExp, ForExp, IfExp
-	
+	// OpExp, WhileExp, ForExp, IfExp, NilExp, RecordExp, VarExp, FieldList
 	ExpTy transExp(Absyn.Exp e) {
 		ExpTy result;
 
@@ -65,10 +64,25 @@ public class Semant {
 			result = transExp((Absyn.CallExp) e);
 		else if (e instanceof Absyn.RecordExp)
 			result = transExp((Absyn.RecordExp) e);
+		else if (e instanceof Absyn.VarExp)
+			result = transExp((Absyn.VarExp) e);
 		else
 			throw new Error("Semant.transExp");
 		e.type = result.ty;
 		return result;
+	}
+	
+	ExpTy transExp(Absyn.VarExp e){
+		ExpTy var = transVar(e.var);
+		if(var == null){
+			error(e.pos, "Variable not declared");
+			return new ExpTy(null, INT); 
+		}
+		return new ExpTy(null, var.ty); 
+	}
+	
+	ExpTy transExp(Absyn.BreakExp e){
+		return new ExpTy(null, VOID);
 	}
 	
 	ExpTy transExp(Absyn.RecordExp e){
@@ -320,7 +334,8 @@ public class Semant {
 		return new ExpTy(null,VOID); 
 	}
 	// Declarations Type Check  ---------------------------------------------------
-	// TODO: Dec, DecList, FunctionDec, TypeDec, VarDec
+	// TODO: VarDec
+	// DONE: Dec, DecList, FunctionDec, TypeDec, 
 	
 	ExpTy transDec(Absyn.Dec d) {
 		if (d instanceof Absyn.VarDec)
@@ -336,42 +351,40 @@ public class Semant {
 		Type returnType = null;
 		ExpTy body = transExp(d.body);
 		
-		if (d.result != null)
-		{
+		// Type Checking ---------------------------------------------------------------------
+		
+		if (d.result != null){
 			returnType = transTy(d.result);
 			if (returnType.actual() != body.ty)
 				error(d.result.pos, "FUNCTION DEC ERROR: return type not equal to body type");
 		}
-		else if(body.ty != VOID)
+		else if(body.ty != VOID){
 			error(d.pos, "FUNCTION DEC ERROR: body exp type must be void");
+			returnType = VOID;
+		}
 		
 		if (repeatedFields(d.params))
 			error(d.pos, "FUNCTION DEC ERROR: field name repeated");
 		
-		RECORD formals = transTypeFields(d.params);
-				
-		if (env.venv.get(d.name) == null){
-			if (returnType != null){
-				FunEntry funEntry = new FunEntry(formals, returnType);
-				d.entry = funEntry;
-				env.venv.put(d.name, funEntry);
-			}
-			else
-				env.venv.put(d.name, new FunEntry(formals, VOID));
-			
-			if(d.next != null){
-				transDec(d.next);
-			}
-		}
-		else
+		if (env.venv.get(d.name) != null)
 			error(d.pos, "FUNCTION DEC ERROR: redeclared function");
 		
+		// Insert Function --------------------------------------------------------------------
+		
+		RECORD formals = transTypeFields(d.params);
+				
+		FunEntry funEntry = new FunEntry(formals, returnType);
+		d.entry = funEntry;
+		env.venv.put(d.name, funEntry);
 		env.venv.beginScope();
 		for(Absyn.FieldList p = d.params; p != null; p = p.tail){
 			env.venv.put(p.name, new VarEntry((Type) env.tenv.get(p.typ)));
 		}
 		transExp(d.body);
 		env.venv.endScope();
+				
+		if(d.next != null)
+			transDec(d.next);
 		
 		return null;
 	}
@@ -410,7 +423,6 @@ public class Semant {
 			d.entry = new NAME(d.name); 
 			env.tenv.put(d.name, d.entry);
 			d.entry.bind(transTy(d.ty));
-			
 			if(d.next != null){
 				transDec(d.next);
 			}
@@ -421,7 +433,8 @@ public class Semant {
 	}
 
 	// Variables, Subscripts, Fields Type Check ------------------------------------ 
-	// TODO: FieldVar, SimpleVar, SubstriptVar, Var
+	// TODO: 
+	// DONE: FieldVar, SimpleVar, SubstriptVar, Var
 	
 	ExpTy transVar(Absyn.Var v){
 		ExpTy result;
@@ -466,13 +479,9 @@ public class Semant {
 		}
 	}
 	
-//	ExpTy transVar(Absyn.SubscriptVar v){
-//		ExpTy index = transExp(v.index); 
-//		ExpTy var = transVar(v.var);
-//	}
-	
 	// Types Type Check --------------------------------------------------------------
-	// TODO: ArrayTy, NameTy, RecordTy, Ty, 
+	// TODO: ArrayTy, NameTy 
+	// DONE: Ty, RecordTy,
 	
 	Type transTy(Absyn.Ty t){
 		if (t instanceof Absyn.NameTy)
@@ -489,12 +498,25 @@ public class Semant {
 	}
 	
 	Type transTy(Absyn.RecordTy t){
-		RECORD n = (RECORD) env.tenv.get(t.fields.name); 
 		
-		if(n != null)
-			return n; 
-		error(t.pos, "RECORD ERROR: Not defined"); 
-		return VOID;
+		RECORD rec = transTypeFields(t.fields); 
+		
+		if (rec == null){
+			error (t.pos, "RECORD ERROR: error...");
+			return VOID;
+		}
+		else
+			return rec;
+		
+//		if (t == null)
+//			return null;
+//		
+//		RECORD n = (RECORD) env.tenv.get(t.fields.name); 
+//		
+//		if(n != null)
+//			return new RECORD(n.fieldName, n.actual(), transTypeFields(t.fields)); 
+//		error(t.pos, "RECORD ERROR: Not defined"); 
+//		return VOID;
 	}
 	
 	Type transTy(Absyn.NameTy t){
@@ -513,6 +535,7 @@ public class Semant {
 		error(t.pos, "Type:"+t.typ+" is not defined!");
 		return VOID;
 	}
+	
 	// Helpers ----------------------------------------------------------------------
 	
 	public void transProg(Absyn.Exp exp) {
